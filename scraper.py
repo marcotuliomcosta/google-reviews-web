@@ -60,7 +60,12 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
     """
     import urllib.parse
     cookies = _load_cookies(cookies_file)
-    search_url = f"https://www.google.com/maps/search/{urllib.parse.quote(query)}"
+
+    # Força busca no Brasil se não houver localização na query
+    br_keywords = ['brasil', 'brazil', ' sp', ' rj', ' mg', ' rs', ' pr', ' ba', ' sc', ' go', ' df']
+    has_location = any(k in query.lower() for k in br_keywords)
+    query_br = query if has_location else f"{query}, Brasil"
+    search_url = f"https://www.google.com/maps/search/{urllib.parse.quote(query_br)}?hl=pt-BR&gl=br"
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -80,12 +85,25 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
 
         await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
 
-        # Aguarda os resultados aparecerem (mais confiável que timeout fixo)
+        # Se o Maps redirecionou direto pra página da empresa (resultado único),
+        # extrai como item único sem precisar de lista
+        await page.wait_for_timeout(2000)
+        current_url = page.url
+        if '/maps/place/' in current_url:
+            try:
+                title = await page.title()
+                name = re.sub(r"\s*[–-]\s*Google Maps$", "", title).strip()
+                if name:
+                    return [{"name": name, "address": "", "rating": "", "url": current_url}]
+            except Exception:
+                pass
+
+        # Aguarda lista de resultados
         try:
-            await page.wait_for_selector('.Nv2PK, [role="article"]', timeout=10000)
+            await page.wait_for_selector('.Nv2PK, [role="article"]', timeout=8000)
         except Exception:
             pass
-        await page.wait_for_timeout(1500)
+        await page.wait_for_timeout(1000)
 
         results = await page.evaluate("""() => {
             const items = [];
