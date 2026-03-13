@@ -54,6 +54,21 @@ def _normalize_maps_url(url: str) -> str:
     return clean_url
 
 
+async def _extract_address_from_place_page(page) -> str:
+    """Extrai endereço de uma página de empresa já carregada no Maps."""
+    try:
+        btn = page.locator("button[data-item-id='address']")
+        aria = await btn.first.get_attribute("aria-label", timeout=5000) or ""
+        addr = re.sub(r"^[Ee]ndere[çc]o:\s*", "", aria).strip()
+        if not addr:
+            addr = await btn.first.inner_text(timeout=3000)
+            addr = addr.strip()
+        return addr
+    except Exception:
+        pass
+    return ""
+
+
 async def search_companies(query: str, cookies_file: Path) -> list[dict]:
     """
     Busca empresas no Google Maps pelo nome e retorna os top resultados.
@@ -61,11 +76,10 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
     import urllib.parse
     cookies = _load_cookies(cookies_file)
 
-    # Coordenadas de São Paulo — força Google Maps a retornar resultados brasileiros
-    # independente do IP do servidor (Railway fica nos EUA)
+    # Centro do Brasil + gl=br força resultados brasileiros mesmo com IP dos EUA (Railway)
     search_url = (
         f"https://www.google.com/maps/search/{urllib.parse.quote(query)}"
-        f"/@-23.5505,-46.6333,10z?hl=pt-BR&gl=br"
+        f"/@-14.235,-51.925,5z?hl=pt-BR&gl=br"
     )
 
     async with async_playwright() as p:
@@ -77,8 +91,8 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
             locale="pt-BR",
             viewport={"width": 1280, "height": 900},
             user_agent=USER_AGENT,
-            # GPS do browser apontando para São Paulo
-            geolocation={"latitude": -23.5505, "longitude": -46.6333},
+            # GPS do browser apontando para o centro do Brasil
+            geolocation={"latitude": -14.235, "longitude": -51.925},
             permissions=["geolocation"],
         )
         # Cookie de consentimento do Google (evita popup que bloqueia resultados)
@@ -97,24 +111,26 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
         await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
 
         # Se o Maps redirecionou direto pra página da empresa (resultado único),
-        # extrai como item único sem precisar de lista
-        await page.wait_for_timeout(2000)
+        # extrai nome + endereço da própria página
+        await page.wait_for_timeout(3000)
         current_url = page.url
         if '/maps/place/' in current_url:
             try:
                 title = await page.title()
                 name = re.sub(r"\s*[–-]\s*Google Maps$", "", title).strip()
                 if name:
-                    return [{"name": name, "address": "", "rating": "", "url": current_url}]
+                    await page.wait_for_timeout(3000)
+                    address = await _extract_address_from_place_page(page)
+                    return [{"name": name, "address": address, "rating": "", "url": current_url}]
             except Exception:
                 pass
 
-        # Aguarda lista de resultados
+        # Aguarda lista de resultados (até 12s)
         try:
-            await page.wait_for_selector('.Nv2PK, [role="article"]', timeout=8000)
+            await page.wait_for_selector('.Nv2PK, [role="article"]', timeout=12000)
         except Exception:
             pass
-        await page.wait_for_timeout(1000)
+        await page.wait_for_timeout(2000)
 
         results = await page.evaluate("""() => {
             const items = [];
