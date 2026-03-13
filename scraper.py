@@ -187,10 +187,13 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
                 }
                 // Cidade/estado: prioriza linha com sigla de estado brasileiro
                 const stateRe = /\\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\\b/;
-                const cityLine = leafTexts.find(t => stateRe.test(t)) || "";
+                const cityLine = leafTexts.find(t => stateRe.test(t))
+                    // fallback: texto com vírgula e sem dígitos, tipo "Uberlândia, MG" ou só "Uberlândia"
+                    || leafTexts.find(t => t.includes(',') && !/\\d/.test(t) && t.length < 50)
+                    || "";
                 // Rua: linha com número, diferente da cidade
                 const streetLine = leafTexts.find(t => /\\d/.test(t) && t.length > 6 && t !== cityLine) || "";
-                const address = [streetLine, cityLine].filter(Boolean).join(', ');
+                const address = [streetLine, cityLine].filter(Boolean).join(' – ');
 
                 // Rating
                 let rating = "";
