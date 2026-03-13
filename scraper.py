@@ -54,6 +54,77 @@ def _normalize_maps_url(url: str) -> str:
     return clean_url
 
 
+async def search_companies(query: str, cookies_file: Path) -> list[dict]:
+    """
+    Busca empresas no Google Maps pelo nome e retorna os top resultados.
+    """
+    import urllib.parse
+    cookies = _load_cookies(cookies_file)
+    search_url = f"https://www.google.com/maps/search/{urllib.parse.quote(query)}"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        ctx = await browser.new_context(
+            locale="pt-BR",
+            viewport={"width": 1280, "height": 900},
+            user_agent=USER_AGENT,
+        )
+        if cookies:
+            await ctx.add_cookies(cookies)
+
+        page = await ctx.new_page()
+        await Stealth().apply_stealth_async(page)
+
+        await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+        await page.wait_for_timeout(4000)
+
+        results = await page.evaluate("""() => {
+            const items = [];
+            const seen = new Set();
+            const containers = document.querySelectorAll('.Nv2PK, [role="article"]');
+            for (const container of containers) {
+                const link = container.querySelector('a[href*="/maps/place/"]');
+                if (!link) continue;
+                const url = link.href;
+                if (!url || seen.has(url)) continue;
+                seen.add(url);
+
+                let name = "";
+                const nameEl = container.querySelector('.qBF1Pd, .fontHeadlineSmall');
+                if (nameEl) name = nameEl.innerText.trim();
+                if (!name) {
+                    const h = container.querySelector('h1, h2, h3');
+                    if (h) name = h.innerText.trim();
+                }
+
+                let address = "";
+                const spans = container.querySelectorAll('.W4Efsd span, .UaQhfb span, .Io6YTe');
+                for (const s of spans) {
+                    const t = s.innerText.trim();
+                    if (t && t.length > 5 && !/^[\\d,\\.]+$/.test(t) && !/avalia/i.test(t) && !/aberto|fechado/i.test(t)) {
+                        address = t;
+                        break;
+                    }
+                }
+
+                let rating = "";
+                const ratingEl = container.querySelector('.MW4etd');
+                if (ratingEl) rating = ratingEl.innerText.trim();
+
+                if (name) items.push({ name, address, rating, url });
+                if (items.length >= 6) break;
+            }
+            return items;
+        }""")
+
+        await browser.close()
+
+    return results
+
+
 async def preview_company(url: str, cookies_file: Path) -> dict:
     """
     Scrape rápido: retorna nome, endereço, qtd avaliações, nota média.

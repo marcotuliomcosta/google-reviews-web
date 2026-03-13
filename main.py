@@ -71,6 +71,25 @@ async def get_config():
     return {"google_client_id": GOOGLE_CLIENT_ID}
 
 
+@app.get("/api/search")
+async def search(q: str = "", authorization: str = Header(default="")):
+    _require_auth(authorization)
+    _check_server_session()
+    if not q or len(q.strip()) < 2:
+        return []
+    try:
+        from scraper import search_companies
+        results = await asyncio.wait_for(
+            _run_playwright(search_companies(q.strip(), COOKIES_FILE)),
+            timeout=30,
+        )
+        return results
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Timeout na busca.")
+    except Exception as e:
+        raise HTTPException(500, f"Erro na busca: {str(e)}")
+
+
 # ── Autenticação Google Sign-In ───────────────────────────────────────────────
 def _require_auth(authorization: str) -> dict:
     if not GOOGLE_CLIENT_ID:

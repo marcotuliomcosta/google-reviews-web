@@ -5,6 +5,7 @@ const App = (() => {
   let _token = "";
   let _jobPollTimer = null;
   let _previewData = null;
+  let _searchTimer = null;
 
   // ── Init ────────────────────────────────────────────────────────────────────
   async function init() {
@@ -16,7 +17,6 @@ const App = (() => {
         return;
       }
 
-      // Inicializa Google Sign-In com o CLIENT_ID do servidor
       window.handleCredentialResponse = (response) => {
         _token = response.credential;
         _goToMain();
@@ -56,7 +56,6 @@ const App = (() => {
     document.getElementById("login-screen").classList.add("hidden");
     document.getElementById("main-screen").classList.remove("hidden");
 
-    // Decodifica JWT para mostrar nome do usuário
     try {
       const payload = JSON.parse(atob(_token.split(".")[1]));
       document.getElementById("user-name").textContent = payload.name || payload.email;
@@ -65,14 +64,81 @@ const App = (() => {
     } catch (_) {}
   }
 
+  // ── Busca de empresas ────────────────────────────────────────────────────────
+  function onSearchInput() {
+    const q = document.getElementById("search-input").value.trim();
+    const resultsEl = document.getElementById("search-results");
+
+    // Limpa seleção anterior
+    document.getElementById("maps-url").value = "";
+    document.getElementById("verify-btn").classList.add("hidden");
+    document.getElementById("main-error").classList.add("hidden");
+
+    if (q.length < 2) {
+      resultsEl.classList.add("hidden");
+      resultsEl.innerHTML = "";
+      return;
+    }
+
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => _doSearch(q), 500);
+  }
+
+  async function _doSearch(q) {
+    const spinner = document.getElementById("search-spinner");
+    const resultsEl = document.getElementById("search-results");
+    spinner.classList.remove("hidden");
+    resultsEl.classList.add("hidden");
+
+    try {
+      const res = await _api(`/api/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error();
+      const items = await res.json();
+
+      resultsEl.innerHTML = "";
+
+      if (!items || items.length === 0) {
+        resultsEl.innerHTML = '<div class="search-empty">Nenhuma empresa encontrada.</div>';
+      } else {
+        items.forEach(item => {
+          const div = document.createElement("div");
+          div.className = "search-item";
+          div.innerHTML = `
+            <span class="search-item-name">${item.name}</span>
+            ${item.address ? `<span class="search-item-addr">${item.address}</span>` : ""}
+            ${item.rating ? `<span class="search-item-rating">★ ${item.rating}</span>` : ""}
+          `;
+          div.addEventListener("click", () => _selectResult(item));
+          resultsEl.appendChild(div);
+        });
+      }
+
+      resultsEl.classList.remove("hidden");
+    } catch (_) {
+      resultsEl.innerHTML = '<div class="search-empty">Erro na busca. Tente novamente.</div>';
+      resultsEl.classList.remove("hidden");
+    } finally {
+      spinner.classList.add("hidden");
+    }
+  }
+
+  function _selectResult(item) {
+    document.getElementById("search-input").value = item.name;
+    document.getElementById("maps-url").value = item.url;
+    document.getElementById("search-results").classList.add("hidden");
+    document.getElementById("verify-btn").classList.remove("hidden");
+    // Dispara verify automaticamente
+    verify();
+  }
+
   // ── Verificar empresa ────────────────────────────────────────────────────────
   async function verify() {
     const url = document.getElementById("maps-url").value.trim();
     const errorEl = document.getElementById("main-error");
     errorEl.classList.add("hidden");
 
-    if (!url) { _err(errorEl, "Cole a URL do Google Maps."); return; }
-    if (!url.includes("google.com") || !url.includes("/maps")) { _err(errorEl, "URL inválida. Use uma URL do Google Maps."); return; }
+    if (!url) { _err(errorEl, "Selecione uma empresa na busca."); return; }
+    if (!url.includes("google.com") || !url.includes("/maps")) { _err(errorEl, "URL inválida."); return; }
 
     const btn = document.getElementById("verify-btn");
     _loading(btn, true);
@@ -181,6 +247,9 @@ const App = (() => {
       document.getElementById(id).classList.add("hidden")
     );
     document.getElementById("maps-url").value = "";
+    document.getElementById("search-input").value = "";
+    document.getElementById("search-results").classList.add("hidden");
+    document.getElementById("verify-btn").classList.add("hidden");
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -206,7 +275,7 @@ const App = (() => {
     document.getElementById("progress-pct").textContent  = tot > 0 ? pct + "%" : "";
   }
 
-  return { init, verify, closePopup, extract, reset };
+  return { init, verify, closePopup, extract, reset, onSearchInput };
 })();
 
 document.addEventListener("DOMContentLoaded", App.init);

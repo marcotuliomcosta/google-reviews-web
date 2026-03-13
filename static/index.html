@@ -52,16 +52,24 @@
     <main>
       <div class="card">
         <h2>Extrair avaliações</h2>
-        <p class="card-desc">Cole a URL do Google Maps da empresa. Acesse a página direta da empresa (não por pesquisa), clique em "Avaliações" e copie a URL.</p>
+        <p class="card-desc">Digite o nome da empresa para buscar no Google Maps.</p>
 
-        <div class="input-group">
-          <label for="maps-url">URL do Google Maps</label>
-          <input type="text" id="maps-url"
-            placeholder="https://www.google.com/maps/place/..."
-            autocomplete="off" />
+        <div class="input-group search-group">
+          <label for="search-input">Buscar empresa</label>
+          <div class="search-wrapper">
+            <input type="text" id="search-input"
+              placeholder="Ex: Nubank, iFood, Magazine Luiza..."
+              autocomplete="off"
+              oninput="App.onSearchInput()" />
+            <span id="search-spinner" class="search-spinner hidden"></span>
+          </div>
+          <div id="search-results" class="search-results hidden"></div>
         </div>
 
-        <button id="verify-btn" class="btn-primary" onclick="App.verify()">
+        <!-- URL preenchida automaticamente ao selecionar resultado -->
+        <input type="hidden" id="maps-url" />
+
+        <button id="verify-btn" class="btn-primary hidden" onclick="App.verify()">
           <span class="btn-text">Verificar empresa</span>
           <span class="btn-spinner hidden"></span>
         </button>
