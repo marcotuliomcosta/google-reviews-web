@@ -78,8 +78,9 @@ def _require_auth(authorization: str) -> dict:
         from google.oauth2 import id_token
         from google.auth.transport import requests as g_req
         return id_token.verify_oauth2_token(token, g_req.Request(), GOOGLE_CLIENT_ID)
-    except Exception:
-        raise HTTPException(401, "Sessão expirada. Recarregue a página.")
+    except Exception as e:
+        print(f"[AUTH ERROR] {type(e).__name__}: {e}")
+        raise HTTPException(401, f"Sessão expirada: {e}")
 
 
 def _check_server_session():
