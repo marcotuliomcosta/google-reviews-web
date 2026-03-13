@@ -488,6 +488,22 @@ main {
 }
 .selected-clear:hover { background: #fde8e8; color: var(--red); }
 
+.selected-dot {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid #c3e6d0;
+  border-top-color: #22863a;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex-shrink: 0;
+}
+
+.selected-status {
+  font-size: .8rem;
+  color: #22863a;
+  font-style: italic;
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .card { padding: 24px 20px; }

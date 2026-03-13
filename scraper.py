@@ -91,6 +91,7 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
             const items = [];
             const seen = new Set();
             const containers = document.querySelectorAll('.Nv2PK, [role="article"]');
+
             for (const container of containers) {
                 const link = container.querySelector('a[href*="/maps/place/"]');
                 if (!link) continue;
@@ -98,35 +99,53 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
                 if (!url || seen.has(url)) continue;
                 seen.add(url);
 
-                // Nome
+                // Nome — múltiplas estratégias em ordem de confiabilidade
                 let name = "";
-                const nameEl = container.querySelector('.qBF1Pd, .fontHeadlineSmall');
-                if (nameEl) name = nameEl.innerText.trim();
+                // 1: aria-label no link principal
+                const aria = link.getAttribute('aria-label');
+                if (aria && aria.length > 1 && aria.length < 120) name = aria.trim();
+                // 2: elemento com role heading
                 if (!name) {
-                    const h = container.querySelector('h1, h2, h3');
-                    if (h) name = h.innerText.trim();
+                    const hEl = container.querySelector('[role="heading"]');
+                    if (hEl) name = hEl.innerText.trim();
                 }
-
-                // Endereço completo — coleta todas as linhas e filtra a que parece endereço
-                let address = "";
-                const allSpans = container.querySelectorAll('.W4Efsd span, .UaQhfb span, .Io6YTe, .fontBodyMedium span');
-                const lines = [];
-                for (const s of allSpans) {
-                    const t = s.innerText.trim();
-                    if (t && t.length > 4 && !/^[\\d,\\.\\s]+$/.test(t) && !/avalia/i.test(t)) {
-                        lines.push(t);
+                // 3: classes conhecidas
+                if (!name) {
+                    const nEl = container.querySelector('.qBF1Pd, .fontHeadlineSmall, .NrDZNb, .OSrXXb');
+                    if (nEl) name = nEl.innerText.trim();
+                }
+                // 4: primeiro span/div de texto razoável no container
+                if (!name) {
+                    for (const el of container.querySelectorAll('span, div')) {
+                        if (el.children.length > 0) continue;
+                        const t = el.innerText.trim();
+                        if (t.length > 2 && t.length < 100 && !/^[\\d,.★·]+$/.test(t)) {
+                            name = t; break;
+                        }
                     }
                 }
-                // Prefere linhas que contêm número (endereço real) ou vírgula (rua, cidade)
-                const addrLine = lines.find(l => /\\d/.test(l) && l.length > 8) || lines.find(l => l.includes(',')) || lines[1] || lines[0] || "";
-                address = addrLine;
+                if (!name) continue;
+
+                // Endereço + cidade — coleta folhas de texto e monta endereço completo
+                const leafTexts = [];
+                for (const el of container.querySelectorAll('span, div')) {
+                    if (el.children.length > 0) continue;
+                    const t = el.innerText.trim().replace(/^·\\s*/, '');
+                    if (t.length > 3 && t !== name && !/^[\\d,.★]+$/.test(t) && !/avalia/i.test(t) && !/aberto|fechado/i.test(t) && !/^\\d+\\s*(km|m)$/.test(t)) {
+                        leafTexts.push(t);
+                    }
+                }
+                // Linha com número de rua (endereço) + linha com cidade/estado
+                const streetLine = leafTexts.find(t => /\\d/.test(t) && t.length > 6) || "";
+                const cityLine = leafTexts.find(t => !t.includes(streetLine) && /,\\s*[A-Z]/.test(t) && !/^\\d/.test(t)) || leafTexts.find(t => t !== streetLine && t.length > 3) || "";
+                const address = [streetLine, cityLine].filter(Boolean).join(' — ');
 
                 // Rating
                 let rating = "";
-                const ratingEl = container.querySelector('.MW4etd');
-                if (ratingEl) rating = ratingEl.innerText.trim();
+                const rEl = container.querySelector('.MW4etd');
+                if (rEl) rating = rEl.innerText.trim();
 
-                if (name) items.push({ name, address, rating, url });
+                items.push({ name, address, rating, url });
                 if (items.length >= 7) break;
             }
             return items;

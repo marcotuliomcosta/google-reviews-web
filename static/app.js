@@ -73,6 +73,7 @@ const App = (() => {
     document.getElementById("maps-url").value = "";
     document.getElementById("verify-btn").classList.add("hidden");
     document.getElementById("main-error").classList.add("hidden");
+    document.getElementById("selected-company").classList.add("hidden");
 
     if (q.length < 2) {
       resultsEl.classList.add("hidden");
@@ -127,16 +128,24 @@ const App = (() => {
     document.getElementById("search-results").classList.add("hidden");
     document.getElementById("search-input").value = "";
     document.getElementById("search-input").placeholder = "Buscar outra empresa...";
-
-    // Mostra card de empresa selecionada
-    document.getElementById("selected-name").textContent = item.name;
-    document.getElementById("selected-addr").textContent = item.address || "";
-    document.getElementById("selected-company").classList.remove("hidden");
-    document.getElementById("verify-btn").classList.add("hidden");
     document.getElementById("main-error").classList.add("hidden");
 
-    // Dispara verify automaticamente
+    // Mostra card com estado de carregando
+    document.getElementById("selected-name").textContent = item.name;
+    document.getElementById("selected-addr").textContent = item.address || "";
+    document.getElementById("selected-check").classList.add("hidden");
+    document.getElementById("selected-loading-dot").classList.remove("hidden");
+    document.getElementById("selected-status").classList.remove("hidden");
+    document.getElementById("selected-company").classList.remove("hidden");
+
+    // Busca dados da empresa
     verify();
+  }
+
+  function _stopSelectedLoading() {
+    document.getElementById("selected-check").classList.remove("hidden");
+    document.getElementById("selected-loading-dot").classList.add("hidden");
+    document.getElementById("selected-status").classList.add("hidden");
   }
 
   function clearSelection() {
@@ -174,9 +183,11 @@ const App = (() => {
       }
 
       _previewData = await res.json();
+      _stopSelectedLoading();
       _showPopup(_previewData);
 
     } catch (e) {
+      _stopSelectedLoading();
       _err(errorEl, e.message || "Falha ao conectar.");
     } finally {
       _loading(btn, false);

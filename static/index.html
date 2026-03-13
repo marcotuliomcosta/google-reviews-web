@@ -71,10 +71,12 @@
 
         <!-- Empresa selecionada -->
         <div id="selected-company" class="selected-company hidden">
-          <div class="selected-check">✓</div>
+          <div id="selected-check" class="selected-check">✓</div>
+          <span id="selected-loading-dot" class="selected-dot hidden"></span>
           <div class="selected-info">
             <span id="selected-name"></span>
             <span id="selected-addr"></span>
+            <span id="selected-status" class="selected-status hidden">Buscando informações...</span>
           </div>
           <button class="selected-clear" onclick="App.clearSelection()" title="Trocar empresa">✕</button>
         </div>
