@@ -69,6 +69,16 @@
         <!-- URL preenchida automaticamente ao selecionar resultado -->
         <input type="hidden" id="maps-url" />
 
+        <!-- Empresa selecionada -->
+        <div id="selected-company" class="selected-company hidden">
+          <div class="selected-check">✓</div>
+          <div class="selected-info">
+            <span id="selected-name"></span>
+            <span id="selected-addr"></span>
+          </div>
+          <button class="selected-clear" onclick="App.clearSelection()" title="Trocar empresa">✕</button>
+        </div>
+
         <button id="verify-btn" class="btn-primary hidden" onclick="App.verify()">
           <span class="btn-text">Verificar empresa</span>
           <span class="btn-spinner hidden"></span>

@@ -123,12 +123,29 @@ const App = (() => {
   }
 
   function _selectResult(item) {
-    document.getElementById("search-input").value = item.name;
     document.getElementById("maps-url").value = item.url;
     document.getElementById("search-results").classList.add("hidden");
-    document.getElementById("verify-btn").classList.remove("hidden");
+    document.getElementById("search-input").value = "";
+    document.getElementById("search-input").placeholder = "Buscar outra empresa...";
+
+    // Mostra card de empresa selecionada
+    document.getElementById("selected-name").textContent = item.name;
+    document.getElementById("selected-addr").textContent = item.address || "";
+    document.getElementById("selected-company").classList.remove("hidden");
+    document.getElementById("verify-btn").classList.add("hidden");
+    document.getElementById("main-error").classList.add("hidden");
+
     // Dispara verify automaticamente
     verify();
+  }
+
+  function clearSelection() {
+    document.getElementById("maps-url").value = "";
+    document.getElementById("selected-company").classList.add("hidden");
+    document.getElementById("verify-btn").classList.add("hidden");
+    document.getElementById("search-input").value = "";
+    document.getElementById("search-input").placeholder = "Ex: Nubank, iFood, Magazine Luiza...";
+    document.getElementById("search-input").focus();
   }
 
   // ── Verificar empresa ────────────────────────────────────────────────────────
@@ -275,7 +292,7 @@ const App = (() => {
     document.getElementById("progress-pct").textContent  = tot > 0 ? pct + "%" : "";
   }
 
-  return { init, verify, closePopup, extract, reset, onSearchInput };
+  return { init, verify, closePopup, extract, reset, onSearchInput, clearSelection };
 })();
 
 document.addEventListener("DOMContentLoaded", App.init);

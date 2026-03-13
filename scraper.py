@@ -79,7 +79,13 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
         await Stealth().apply_stealth_async(page)
 
         await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-        await page.wait_for_timeout(4000)
+
+        # Aguarda os resultados aparecerem (mais confiável que timeout fixo)
+        try:
+            await page.wait_for_selector('.Nv2PK, [role="article"]', timeout=10000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1500)
 
         results = await page.evaluate("""() => {
             const items = [];
@@ -92,6 +98,7 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
                 if (!url || seen.has(url)) continue;
                 seen.add(url);
 
+                // Nome
                 let name = "";
                 const nameEl = container.querySelector('.qBF1Pd, .fontHeadlineSmall');
                 if (nameEl) name = nameEl.innerText.trim();
@@ -100,22 +107,27 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
                     if (h) name = h.innerText.trim();
                 }
 
+                // Endereço completo — coleta todas as linhas e filtra a que parece endereço
                 let address = "";
-                const spans = container.querySelectorAll('.W4Efsd span, .UaQhfb span, .Io6YTe');
-                for (const s of spans) {
+                const allSpans = container.querySelectorAll('.W4Efsd span, .UaQhfb span, .Io6YTe, .fontBodyMedium span');
+                const lines = [];
+                for (const s of allSpans) {
                     const t = s.innerText.trim();
-                    if (t && t.length > 5 && !/^[\\d,\\.]+$/.test(t) && !/avalia/i.test(t) && !/aberto|fechado/i.test(t)) {
-                        address = t;
-                        break;
+                    if (t && t.length > 4 && !/^[\\d,\\.\\s]+$/.test(t) && !/avalia/i.test(t)) {
+                        lines.push(t);
                     }
                 }
+                // Prefere linhas que contêm número (endereço real) ou vírgula (rua, cidade)
+                const addrLine = lines.find(l => /\\d/.test(l) && l.length > 8) || lines.find(l => l.includes(',')) || lines[1] || lines[0] || "";
+                address = addrLine;
 
+                // Rating
                 let rating = "";
                 const ratingEl = container.querySelector('.MW4etd');
                 if (ratingEl) rating = ratingEl.innerText.trim();
 
                 if (name) items.push({ name, address, rating, url });
-                if (items.length >= 6) break;
+                if (items.length >= 7) break;
             }
             return items;
         }""")
