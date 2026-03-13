@@ -18,9 +18,15 @@ from pydantic import BaseModel
 load_dotenv()
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-COOKIES_FILE     = Path(os.getenv("COOKIES_FILE", "../google-reviews-scraper/google_cookies.json"))
+COOKIES_FILE     = Path(os.getenv("COOKIES_FILE", "./google_cookies.json"))
 OUTPUT_DIR       = Path(os.getenv("OUTPUT_DIR", "./output"))
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+# Carrega cookies de variável de ambiente (base64) se existir
+_cookies_b64 = os.getenv("GOOGLE_COOKIES_B64", "")
+if _cookies_b64 and not COOKIES_FILE.exists():
+    import base64
+    COOKIES_FILE.write_bytes(base64.b64decode(_cookies_b64))
 
 jobs: dict[str, dict] = {}
 _semaphore = asyncio.Semaphore(2)
