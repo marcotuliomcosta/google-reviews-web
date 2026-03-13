@@ -80,7 +80,7 @@ const App = (() => {
     try {
       const res = await _api("/api/preview", { method: "POST", body: JSON.stringify({ url }) });
 
-      if (res.status === 401) { _err(errorEl, "Sessão expirada. Recarregue a página."); return; }
+      if (res.status === 401) { const e = await res.json().catch(() => ({})); _err(errorEl, e.detail || "Sessão expirada. Recarregue a página."); return; }
       if (res.status === 503) {
         _err(errorEl, "Sessão Google Maps não configurada no servidor. Consulte o admin.");
         return;
