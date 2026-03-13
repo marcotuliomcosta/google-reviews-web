@@ -61,11 +61,12 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
     import urllib.parse
     cookies = _load_cookies(cookies_file)
 
-    # Força busca no Brasil se não houver localização na query
-    br_keywords = ['brasil', 'brazil', ' sp', ' rj', ' mg', ' rs', ' pr', ' ba', ' sc', ' go', ' df']
-    has_location = any(k in query.lower() for k in br_keywords)
-    query_br = query if has_location else f"{query}, Brasil"
-    search_url = f"https://www.google.com/maps/search/{urllib.parse.quote(query_br)}?hl=pt-BR&gl=br"
+    # Coordenadas de São Paulo — força Google Maps a retornar resultados brasileiros
+    # independente do IP do servidor (Railway fica nos EUA)
+    search_url = (
+        f"https://www.google.com/maps/search/{urllib.parse.quote(query)}"
+        f"/@-23.5505,-46.6333,10z?hl=pt-BR&gl=br"
+    )
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -76,7 +77,17 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
             locale="pt-BR",
             viewport={"width": 1280, "height": 900},
             user_agent=USER_AGENT,
+            # GPS do browser apontando para São Paulo
+            geolocation={"latitude": -23.5505, "longitude": -46.6333},
+            permissions=["geolocation"],
         )
+        # Cookie de consentimento do Google (evita popup que bloqueia resultados)
+        await ctx.add_cookies([{
+            "name": "CONSENT",
+            "value": "YES+cb.20240101-00-p0.pt-BR+FX+001",
+            "domain": ".google.com",
+            "path": "/",
+        }])
         if cookies:
             await ctx.add_cookies(cookies)
 
