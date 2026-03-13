@@ -126,19 +126,26 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
                 }
                 if (!name) continue;
 
-                // Endereço + cidade — coleta folhas de texto e monta endereço completo
+                // Endereço + cidade — coleta folhas de texto
                 const leafTexts = [];
                 for (const el of container.querySelectorAll('span, div')) {
                     if (el.children.length > 0) continue;
-                    const t = el.innerText.trim().replace(/^·\\s*/, '');
-                    if (t.length > 3 && t !== name && !/^[\\d,.★]+$/.test(t) && !/avalia/i.test(t) && !/aberto|fechado/i.test(t) && !/^\\d+\\s*(km|m)$/.test(t)) {
+                    const t = el.innerText.trim().replace(/^·\\s*/, '').replace(/^,\\s*/, '');
+                    if (t.length > 3 && t !== name
+                        && !/^[\\d,.★·\\(\\)]+$/.test(t)
+                        && !/avalia/i.test(t)
+                        && !/aberto|fechado/i.test(t)
+                        && !/^\\d+\\s*(km|m)$/i.test(t)
+                        && !/^\\(\\d{2}\\)/.test(t)) {   // filtra DDD tipo (42)
                         leafTexts.push(t);
                     }
                 }
-                // Linha com número de rua (endereço) + linha com cidade/estado
-                const streetLine = leafTexts.find(t => /\\d/.test(t) && t.length > 6) || "";
-                const cityLine = leafTexts.find(t => !t.includes(streetLine) && /,\\s*[A-Z]/.test(t) && !/^\\d/.test(t)) || leafTexts.find(t => t !== streetLine && t.length > 3) || "";
-                const address = [streetLine, cityLine].filter(Boolean).join(' — ');
+                // Cidade/estado: prioriza linha com sigla de estado brasileiro
+                const stateRe = /\\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\\b/;
+                const cityLine = leafTexts.find(t => stateRe.test(t)) || "";
+                // Rua: linha com número, diferente da cidade
+                const streetLine = leafTexts.find(t => /\\d/.test(t) && t.length > 6 && t !== cityLine) || "";
+                const address = [streetLine, cityLine].filter(Boolean).join(', ');
 
                 // Rating
                 let rating = "";

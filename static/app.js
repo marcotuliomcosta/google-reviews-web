@@ -5,7 +5,6 @@ const App = (() => {
   let _token = "";
   let _jobPollTimer = null;
   let _previewData = null;
-  let _searchTimer = null;
 
   // ── Init ────────────────────────────────────────────────────────────────────
   async function init() {
@@ -66,23 +65,19 @@ const App = (() => {
 
   // ── Busca de empresas ────────────────────────────────────────────────────────
   function onSearchInput() {
-    const q = document.getElementById("search-input").value.trim();
-    const resultsEl = document.getElementById("search-results");
-
-    // Limpa seleção anterior
+    // Limpa seleção e resultados ao digitar
     document.getElementById("maps-url").value = "";
     document.getElementById("verify-btn").classList.add("hidden");
     document.getElementById("main-error").classList.add("hidden");
     document.getElementById("selected-company").classList.add("hidden");
+    document.getElementById("search-results").classList.add("hidden");
+    document.getElementById("search-results").innerHTML = "";
+  }
 
-    if (q.length < 2) {
-      resultsEl.classList.add("hidden");
-      resultsEl.innerHTML = "";
-      return;
-    }
-
-    clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(() => _doSearch(q), 500);
+  function doSearch() {
+    const q = document.getElementById("search-input").value.trim();
+    if (q.length < 2) return;
+    _doSearch(q);
   }
 
   async function _doSearch(q) {
@@ -163,8 +158,8 @@ const App = (() => {
     const errorEl = document.getElementById("main-error");
     errorEl.classList.add("hidden");
 
-    if (!url) { _err(errorEl, "Selecione uma empresa na busca."); return; }
-    if (!url.includes("google.com") || !url.includes("/maps")) { _err(errorEl, "URL inválida."); return; }
+    if (!url) { _stopSelectedLoading(); _err(errorEl, "Selecione uma empresa na busca."); return; }
+    if (!url.includes("google.com") || !url.includes("/maps")) { _stopSelectedLoading(); _err(errorEl, "URL inválida."); return; }
 
     const btn = document.getElementById("verify-btn");
     _loading(btn, true);
@@ -303,7 +298,7 @@ const App = (() => {
     document.getElementById("progress-pct").textContent  = tot > 0 ? pct + "%" : "";
   }
 
-  return { init, verify, closePopup, extract, reset, onSearchInput, clearSelection };
+  return { init, verify, closePopup, extract, reset, onSearchInput, doSearch, clearSelection };
 })();
 
 document.addEventListener("DOMContentLoaded", App.init);

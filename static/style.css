@@ -364,13 +364,29 @@ main {
 }
 
 .search-wrapper input {
-  width: 100%;
-  padding-right: 36px;
+  flex: 1;
+  min-width: 0;
 }
+
+.search-btn {
+  flex-shrink: 0;
+  background: var(--blue-mid);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0 18px;
+  height: 42px;
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+  margin-left: 8px;
+}
+.search-btn:hover { background: var(--blue-dark); }
 
 .search-spinner {
   position: absolute;
-  right: 12px;
+  right: 90px;
   width: 16px;
   height: 16px;
   border: 2px solid var(--border);
