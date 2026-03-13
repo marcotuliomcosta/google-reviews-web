@@ -1,0 +1,10 @@
+output/
+.env
+google_cookies.json
+__pycache__/
+*.pyc
+.venv/
+
+# Debug artifacts
+debug*.png
+server.log
