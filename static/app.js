@@ -80,6 +80,15 @@ const App = (() => {
     _doSearch(q);
   }
 
+  // Cor estável para o avatar-inicial, derivada do nome da empresa
+  function _corDoNome(nome) {
+    const cores = ["#2563eb", "#0891b2", "#7c3aed", "#db2777", "#ea580c",
+                   "#16a34a", "#ca8a04", "#dc2626", "#4f46e5", "#0d9488"];
+    let h = 0;
+    for (let i = 0; i < nome.length; i++) h = (h * 31 + nome.charCodeAt(i)) >>> 0;
+    return cores[h % cores.length];
+  }
+
   async function _doSearch(q) {
     const spinner = document.getElementById("search-spinner");
     const resultsEl = document.getElementById("search-results");
@@ -99,10 +108,32 @@ const App = (() => {
         items.forEach(item => {
           const div = document.createElement("div");
           div.className = "search-item";
+          // Ícone: avatar colorido com a inicial fica no fundo; se houver foto
+          // do Maps, ela entra por cima. Se a foto não carregar, some (onerror)
+          // e o avatar aparece. Assim nunca fica sem ícone.
+          const inicial = (item.name || "?").trim().charAt(0).toUpperCase();
+          const cor = _corDoNome(item.name || "");
+          const icone = `
+            <div class="search-item-icon" style="background:${cor}">
+              <span class="search-item-initial">${inicial}</span>
+              ${item.thumb ? `<img class="search-item-thumb" src="${item.thumb}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+            </div>`;
+          const reviews = item.reviews
+            ? `<span class="search-item-reviews">${item.reviews.toLocaleString("pt-BR")} avaliações</span>`
+            : "";
+          const meta = (item.rating || item.reviews)
+            ? `<span class="search-item-meta">
+                 ${item.rating ? `<span class="search-item-rating">★ ${item.rating}</span>` : ""}
+                 ${reviews}
+               </span>`
+            : "";
           div.innerHTML = `
-            <span class="search-item-name">${item.name}</span>
-            ${item.address ? `<span class="search-item-addr">${item.address}</span>` : ""}
-            ${item.rating ? `<span class="search-item-rating">★ ${item.rating}</span>` : ""}
+            ${icone}
+            <div class="search-item-body">
+              <span class="search-item-name">${item.name}</span>
+              ${item.address ? `<span class="search-item-addr">${item.address}</span>` : ""}
+              ${meta}
+            </div>
           `;
           div.addEventListener("click", () => _selectResult(item));
           resultsEl.appendChild(div);

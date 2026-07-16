@@ -4,6 +4,7 @@ Playwright scraping: preview rápido e extração completa de reviews.
 import asyncio
 import json
 import re
+import unicodedata
 from pathlib import Path
 from typing import Callable, Awaitable
 
@@ -69,6 +70,32 @@ async def _extract_address_from_place_page(page) -> str:
     return ""
 
 
+async def _extract_place_photo(page) -> str:
+    """Foto de capa da empresa na página do Maps (ignora avatares e mapas).
+
+    Fotos de lugar usam caminho gps-cs/grass-cs//p/ no googleusercontent; já
+    /a-/ e /a/ são avatares de avaliadores e og:image às vezes é só um mapa.
+    """
+    try:
+        return await page.evaluate("""() => {
+            const isPhoto = s => s && s.includes('googleusercontent')
+                && !s.includes('/a-/') && !s.includes('/a/')
+                && !s.includes('streetview');
+            for (const e of document.querySelectorAll('div[style*="googleusercontent"]')) {
+                const m = getComputedStyle(e).backgroundImage.match(/url\\("?(.*?)"?\\)/);
+                if (m && isPhoto(m[1])) return m[1];
+            }
+            for (const i of document.querySelectorAll('img')) {
+                if (isPhoto(i.src)) return i.src;
+            }
+            const og = document.querySelector('meta[property="og:image"]');
+            if (og && og.content && og.content.includes('googleusercontent')) return og.content;
+            return "";
+        }""")
+    except Exception:
+        return ""
+
+
 async def search_companies(query: str, cookies_file: Path) -> list[dict]:
     """
     Busca empresas no Google Maps pelo nome e retorna os top resultados.
@@ -110,27 +137,57 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
 
         await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
 
-        # Se o Maps redirecionou direto pra página da empresa (resultado único),
-        # extrai nome + endereço da própria página
-        await page.wait_for_timeout(3000)
+        # O Maps decide entre dois caminhos: redirecionar direto pra página da
+        # empresa (resultado único) ou renderizar a lista de resultados. O
+        # redirect pode demorar mais que poucos segundos, então esperamos até
+        # qualquer um dos dois acontecer antes de decidir.
+        try:
+            await page.wait_for_function(
+                "() => location.href.includes('/maps/place/')"
+                " || document.querySelector('.Nv2PK, [role=\"article\"]')",
+                timeout=15000,
+            )
+        except Exception:
+            pass
+        await page.wait_for_timeout(2000)
+
+        # Resultado único: o Maps abriu direto a página da empresa
         current_url = page.url
         if '/maps/place/' in current_url:
             try:
                 title = await page.title()
                 name = re.sub(r"\s*[–-]\s*Google Maps$", "", title).strip()
-                if name:
-                    await page.wait_for_timeout(3000)
+                if name and name.lower() != "google maps":
                     address = await _extract_address_from_place_page(page)
-                    return [{"name": name, "address": address, "rating": "", "url": current_url}]
+                    thumb = await _extract_place_photo(page)
+                    meta = await page.evaluate("""() => {
+                        const r = {rating: "", reviews: 0};
+                        const rt = document.querySelector('.F7nice span[aria-hidden="true"]');
+                        if (rt) r.rating = rt.innerText.trim();
+                        const rv = document.querySelector('.F7nice [aria-label*="avalia"]');
+                        if (rv) {
+                            const m = rv.getAttribute('aria-label').match(/([\\d.]+)/);
+                            if (m) r.reviews = parseInt(m[1].replace(/\\./g, ''), 10) || 0;
+                        }
+                        return r;
+                    }""")
+                    return [{
+                        "name": name, "address": address,
+                        "rating": meta.get("rating", ""), "reviews": meta.get("reviews", 0),
+                        "thumb": thumb, "url": current_url,
+                    }]
             except Exception:
                 pass
 
-        # Aguarda lista de resultados (até 12s)
+        # Rola a lista um pouco pra disparar o lazy-load das fotos dos cards
         try:
-            await page.wait_for_selector('.Nv2PK, [role="article"]', timeout=12000)
+            await page.evaluate("""() => {
+                const feed = document.querySelector('[role="feed"]');
+                if (feed) feed.scrollBy(0, 800);
+            }""")
+            await page.wait_for_timeout(1200)
         except Exception:
             pass
-        await page.wait_for_timeout(2000)
 
         results = await page.evaluate("""() => {
             const items = [];
@@ -199,15 +256,73 @@ async def search_companies(query: str, cookies_file: Path) -> list[dict]:
                 const rEl = container.querySelector('.MW4etd');
                 if (rEl) rating = rEl.innerText.trim();
 
-                items.push({ name, address, rating, url });
-                if (items.length >= 7) break;
+                // Número de avaliações — proxy de destaque/relevância da empresa
+                let reviews = 0;
+                const revAria = container.querySelector('[aria-label*="avalia"]');
+                if (revAria) {
+                    const m = revAria.getAttribute('aria-label').match(/([\\d.]+)\\s*avalia/i);
+                    if (m) reviews = parseInt(m[1].replace(/\\./g, ''), 10) || 0;
+                }
+                if (!reviews) {
+                    const rc = container.querySelector('.UY7F9');
+                    if (rc) {
+                        const m = rc.innerText.match(/([\\d.]+)/);
+                        if (m) reviews = parseInt(m[1].replace(/\\./g, ''), 10) || 0;
+                    }
+                }
+
+                // Miniatura/logo da empresa (foto do card no Maps)
+                let thumb = "";
+                const img = container.querySelector('img[src^="http"]');
+                if (img && img.src && img.naturalWidth !== 1) thumb = img.src;
+
+                items.push({ name, address, rating, reviews, thumb, url });
+                if (items.length >= 20) break;
             }
             return items;
         }""")
 
+        # Ranqueia por destaque: correspondência do nome com a busca + nº de
+        # avaliações. Assim marcas fortes (iFood, Leadlovers...) aparecem antes
+        # de estabelecimentos locais homônimos com poucas avaliações.
+        def _norm(s):
+            s = unicodedata.normalize("NFKD", (s or "").lower())
+            s = "".join(c for c in s if not unicodedata.combining(c))
+            return "".join(c for c in s if c.isalnum() or c.isspace()).strip()
+
+        qn = _norm(query)
+
+        def _score(it):
+            nn = _norm(it.get("name", ""))
+            return (nn == qn, nn.startswith(qn), qn in nn, it.get("reviews", 0))
+
+        results.sort(key=_score, reverse=True)
+        top = results[:8]
+
+        # O card da lista não traz a cidade, só a rua. Abrimos a página de cada
+        # empresa em paralelo pra pegar o endereço completo (rua + cidade + UF).
+        async def _enrich(item):
+            try:
+                pg = await ctx.new_page()
+                await pg.goto(item["url"], wait_until="domcontentloaded", timeout=20000)
+                await pg.wait_for_timeout(1200)
+                full = await _extract_address_from_place_page(pg)
+                if full:
+                    item["address"] = full
+                # Foto principal da empresa (usada como miniatura na busca)
+                if not item.get("thumb"):
+                    thumb = await _extract_place_photo(pg)
+                    if thumb:
+                        item["thumb"] = thumb
+                await pg.close()
+            except Exception:
+                pass
+
+        await asyncio.gather(*[_enrich(i) for i in top])
+
         await browser.close()
 
-    return results
+    return top
 
 
 async def preview_company(url: str, cookies_file: Path) -> dict:
