@@ -537,7 +537,7 @@ async def extract_reviews(
                 break
 
         # Extrai um card individual
-        async def _extract_card(card) -> dict | None:
+        async def _extract_card(card):
             try:
                 try:
                     await card.get_by_role(
